@@ -5,7 +5,7 @@
 NYC Service Requests Logs
 Location: bigquery-public-data.new_york.311_service_requests
 
-Out of the 30,611,813 records in the dataset there 72% that have no due date. Maybe we can help provide a due date when a new request in created 
+Out of the 30,611,813 records in the dataset there are 72% that have no due date. Maybe we can help provide a due date when a new request is created 
 by building a predictive model for request duration.
 
 ```sql
@@ -72,13 +72,35 @@ SELECT
     ELSE location_type END AS location_type 
   , COALESCE(facility_type,'Other') AS facility_type
   , final_windows.* EXCEPT(created_date_day)
+  , ROW_NUMBER() OVER (ORDER BY created_date) AS Record_Id
 FROM `bigquery-public-data.new_york.311_service_requests` requests
 INNER JOIN final_windows 
   ON DATE_TRUNC(requests.created_date,DAY) = final_windows.created_date_day
 WHERE requests.status = 'Closed'
-AND requests.created_date IS NOT NULL
+AND requests.created_date >= '2022-01-01'
 AND requests.closed_date IS NOT NULL
 ;
+
+CREATE OR REPLACE TABLE `test-project-384900.311_reqeusts_modeling.modeling_data_train` AS 
+
+SELECT * FROM `test-project-384900.311_reqeusts_modeling.modeling_data`
+TABLESAMPLE SYSTEM (90 PERCENT);
+
+
+CREATE OR REPLACE TABLE `test-project-384900.311_reqeusts_modeling.modeling_data_test` AS 
+
+SELECT a.* FROM `test-project-384900.311_reqeusts_modeling.modeling_data` a
+LEFT JOIN `test-project-384900.311_reqeusts_modeling.modeling_data_train` b
+	ON a.Record_Id = b.Record_Id 
+WHERE b.Record_Id IS NULL;	
+
+--some testing queries
+
+--SELECT COUNT(*) FROM `test-project-384900.311_reqeusts_modeling.modeling_data`;
+--SELECT COUNT(DISTINCT Record_Id) FROM `test-project-384900.311_reqeusts_modeling.modeling_data`;
+--
+--SELECT COUNT(*) FROM `test-project-384900.311_reqeusts_modeling.modeling_data_test`;
+--SELECT COUNT(*) FROM `test-project-384900.311_reqeusts_modeling.modeling_data_train`;
 ```
 
 Create our model:
@@ -89,10 +111,11 @@ CREATE OR REPLACE MODEL `test-project-384900.311_reqeusts_modeling.model_request
                input_label_cols=['duration_in_days'],
                budget_hours=1.0)
 AS SELECT *
-FROM `test-project-384900.311_reqeusts_modeling.modeling_data`
-TABLESAMPLE SYSTEM (75 PERCENT)
+FROM `test-project-384900.311_reqeusts_modeling.modeling_data_train`
 ;
 ```
+
+Training took: x hours and x minutes
 
 Evaluation of the model:
 
@@ -100,8 +123,7 @@ Evaluation of the model:
 SELECT * FROM ML.EVALUATE(MODEL `test-project-384900.311_reqeusts_modeling.model_request_duration`,
 (
   SELECT *
-  FROM `test-project-384900.311_reqeusts_modeling.modeling_data`
-  TABLESAMPLE SYSTEM (5 PERCENT)
+  FROM `test-project-384900.311_reqeusts_modeling.modeling_data_test`
 ))
 ```
 
@@ -112,7 +134,7 @@ Results:
 - TBD
 - TBD
 
-Using the model for predictions, in case we get to the point where we are confident in the model performance and we want to use this model in production:
+If we wanted to use this model for predictions we could use it like this:
 
 ```sql 
 SELECT * FROM ML.PREDICT(MODEL `test-project-384900.311_reqeusts_modeling.model_request_duration`,
@@ -124,3 +146,6 @@ SELECT * FROM ML.PREDICT(MODEL `test-project-384900.311_reqeusts_modeling.model_
 ```
 
 ![](screenshots/three.PNG)
+
+Ultimately, based on the poor model performance we need to do some more investigation into the data collection methods and data quality.
+Perhaps there are more features we can add into the model, or more feature generation we can do to boost the predictive power of the model.
