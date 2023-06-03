@@ -55,7 +55,7 @@ with_windows AS (
 ),
 
 final_windows AS (
-  SELECT * EXCEPT(row_number) FROM with_windows WHERE row_number >=7
+  SELECT * EXCEPT (row_number) FROM with_windows WHERE row_number >=7
 )
 
 SELECT  
@@ -90,15 +90,37 @@ CREATE OR REPLACE MODEL `test-project-384900.311_reqeusts_modeling.model_request
                budget_hours=1.0)
 AS SELECT *
 FROM `test-project-384900.311_reqeusts_modeling.modeling_data`
+TABLESAMPLE SYSTEM (75 PERCENT)
 ;
 ```
 
 Evaluation of the model:
 
 ```sql
+SELECT * FROM ML.EVALUATE(MODEL `test-project-384900.311_reqeusts_modeling.model_request_duration`,
+(
+  SELECT *
+  FROM `test-project-384900.311_reqeusts_modeling.modeling_data`
+  TABLESAMPLE SYSTEM (5 PERCENT)
+))
 ```
 
-Using the model for predictions:
+![](screenshots/two.PNG)
+
+Results:
+- TBD
+- TBD
+- TBD
+
+Using the model for predictions, in case we get to the point where we are confident in the model performance and we want to use this model in production:
 
 ```sql 
+SELECT * FROM ML.PREDICT(MODEL `test-project-384900.311_reqeusts_modeling.model_request_duration`,
+(
+  SELECT * EXCEPT(duration_in_days)
+  FROM `test-project-384900.311_reqeusts_modeling.modeling_data`
+  TABLESAMPLE SYSTEM (5 PERCENT)
+));
 ```
+
+![](screenshots/three.PNG)
