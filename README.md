@@ -110,39 +110,50 @@ CREATE OR REPLACE MODEL `test-project-384900.311_reqeusts_modeling.model_request
        OPTIONS(model_type='AUTOML_REGRESSOR',
                input_label_cols=['duration_in_days'],
                budget_hours=1.0)
-AS SELECT *
+AS SELECT * EXCEPT(Record_Id)
 FROM `test-project-384900.311_reqeusts_modeling.modeling_data_train`
 ;
 ```
 
-Training took: x hours and x minutes
+Training took: 4 hours and 14 minutes
 
 Evaluation of the model:
 
 ```sql
-SELECT * FROM ML.EVALUATE(MODEL `test-project-384900.311_reqeusts_modeling.model_request_duration`,
+SELECT test.*, sqrt(test.mean_squared_error) AS rmse
+FROM ML.EVALUATE(MODEL `test-project-384900.311_reqeusts_modeling.model_request_duration`,
 (
   SELECT *
   FROM `test-project-384900.311_reqeusts_modeling.modeling_data_test`
-))
+)) test;
 ```
 
 ![](screenshots/two.PNG)
 
 Results:
-- TBD
-- TBD
-- TBD
+- Our R2 and Explained Variance numbers are very low at ~ 15%. The model we built isn't explaining much of the variance in our duration response variable. 
+	- R2 score of 1 (100%) would mean the model can explain 100% of the variance within the respons variable.
+- The high RMSE value means we have a large average distance/difference between the actual observations in our test dataset and the predicted values.
+	- RMSE of 0 would mean a perfect fit to the data.
 
 If we wanted to use this model for predictions we could use it like this:
 
 ```sql 
-SELECT * FROM ML.PREDICT(MODEL `test-project-384900.311_reqeusts_modeling.model_request_duration`,
+SELECT 
+    ROUND(
+    CASE 
+      WHEN predicted_duration_in_days > 0 THEN predicted_duration_in_days 
+      ELSE 0 
+    END
+    ,0) AS predicted_duration_in_days
+  , Record_Id 
+FROM ML.PREDICT(MODEL `test-project-384900.311_reqeusts_modeling.model_request_duration`,
 (
   SELECT * EXCEPT(duration_in_days)
   FROM `test-project-384900.311_reqeusts_modeling.modeling_data`
   TABLESAMPLE SYSTEM (5 PERCENT)
-));
+))
+ORDER BY 2;
 ```
 
 ![](screenshots/three.PNG)
